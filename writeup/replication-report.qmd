@@ -75,37 +75,20 @@ original_p_loss <- original$risky[original$condition == "loss"] / original$n[ori
 ::: {.callout-note appearance="simple" icon=false}
 ## Project links
 
-- **Original paper:** Tversky, A., & Kahneman, D. (1981). The framing of decisions and the
-  psychology of choice. *Science, 211*(4481), 453–458. <https://doi.org/10.1126/science.7455683>
+- **Original paper:** Rios, K., Finkelshteyn, S., Markman, K. D., & Cohen, A. B. (2024). Jewish Americans’ identity salience and effects on attitudes toward diversity. *Scientific Reports, 14*, 21676. <https://doi.org/10.1038/s41598-024-72753-w>
 - **Preregistration:** [OSF registration](https://osf.io/XXXXX) *(registered YYYY-MM-DD, before final data collection)*
-- **Live experiment:** <https://psych251.github.io/your-repo/> (take the study exactly as participants did)
-- **Repository:** <https://github.com/psych251/your-repo> (experiment code, data, and this report)
+- **Live experiment:** <https://psych251.github.io/sarmien22026/> (take the study exactly as participants did)
+- **Repository:** <https://github.com/psych251/sarmien22026> (experiment code, data, and this report)
 :::
 
 # AI use statement
 
-::: {.callout-tip icon=false}
-## Guidance
-
-This statement comes first so a reader knows how the work was produced before reading it. Keep
-it current from the start of the project rather than reconstructing it at the end.
-
-**Course policy: you write all of the text in this report yourself.** AI tools may help with
-code, and may comment on drafts you have written, but they may not write, rewrite or paraphrase
-any of the report's text. That includes "polishing" a paragraph.
-
-List every AI tool you used on this project, what you used it for, and how you checked what it
-produced. Include coding assistants (for example Claude Code, Codex, Copilot) and chat
-assistants. Name the model and version where you know it. "How you checked" is the important
-column: say what you verified yourself, not that the output "looked right". If you used no AI
-tools, replace the table with a sentence saying so.
-:::
-
 | Tool and model | What it was used for | How you checked the output |
 |---|---|---|
-| *e.g., Claude Code (Claude Opus 5)* | *Implemented the experiment from the original Methods section* | *Ran the automated tests; took the study myself; compared every screen with the original materials* |
-| *e.g., Claude Code (Claude Opus 5)* | *Drafted the analysis code* | *Checked the exclusion counts by hand; confirmed the key test matches the preregistration* |
-| *e.g., ChatGPT* | *Comments on my draft of the Introduction (no text generated)* | *Decided which comments to act on and made every change myself; checked any factual claim against the source* |
+| *Claude Code (Claude Sonnet 5)* | *Implemented the experiment from the original Methods section* | *Ran the automated tests; took the study myself; compared every screen with the original materials* |
+| *Claude Code (Claude Sonnet 5)* | *Drafted the analysis code* | *Checked the exclusion counts by hand; confirmed the key test matches the preregistration* |
+
+The table above is the intended use of AI for this project. I have not used AI tools for this project up to this point
 
 I wrote all of the text in this report myself. AI tools were not used to write, rewrite or
 paraphrase it, and were not used to generate, alter, or impute any participant data. I take full
@@ -237,14 +220,10 @@ bind_rows(
 
 ## Introduction
 
-::: {.callout-tip icon=false}
-## Guidance
+I am interested in the ethnic-racial identity development of Latine youth, what factors can promote or hinder ethnic-racial identity development, and whether ethnic-racial identity can be used to increase solidarity across groups. I was interested in Rios et al. (2024) because it is an experiment that manipulated ethnic-racial identity salience by asking participants if they belonged to an ethnic-racial minority group (including religious groups) to see if it would decrease intergroup bias. This study included participants that were Jewish and identified racially as White. The original study found that invoking ethnic-racial identity among Jewish participants did decrease intergroup bias across three experiments. I plan to replicate only the final experiment, Experiment 3, because it looked at potential mediators to the effect that was found.
 
-One or two paragraphs, no abstract and no literature review: that is in the original paper.
-Say what the original study found, which specific finding you are replicating, and why it
-matters to you. Write the Introduction and Methods in the past tense, even though you write
-them before collecting data.
-:::
+For this study, I created a survey with two conditions, one that invoked ethnic-racial identity and one that does not mention it. I preregistered one-way ANOVA testing for the effect of condition on prejudice and another test on feelings about diversity. A potential extension of the study I could undertake would be to add a condition that could invoke feelings of belonging to the ethnic-racial majority group (i.e., White).
+
 
 ## Methods
 
