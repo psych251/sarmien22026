@@ -1,6 +1,6 @@
 ---
-title: "Replication of Problems 1 and 2 of Tversky & Kahneman (1981, *Science*)"
-author: "Your Name (your.email@stanford.edu)"
+title: "Replication of Experiment 3 of Rios et al. (2024, *Scientific Reports*)"
+author: "Natalie Sarmiento (sarmien2@stanford.edu)"
 date: today
 date-format: long
 format:
