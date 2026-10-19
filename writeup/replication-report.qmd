@@ -60,16 +60,22 @@ experiment_id_phase2 <- "framing-demo-phase2"
 # statistics table, and the side-by-side figures. Replace these with your original study's
 # values, and say in a comment exactly where in the paper each one comes from.
 #
+# Rios et al., (2024), Experiment 3 lists N = 105: Used the data file provided in the osf project 
+# to determine how many participants were in each condition. Found that 52 participants were in the
+# manipulation condition and 53 participants were in the control.
+
 # Tversky & Kahneman (1981), Problem 1 (gain frame, N = 152): 72% chose the certain program,
 # 28% the risky one. Problem 2 (loss frame, N = 155): 22% certain, 78% risky. The paper
 # reports percentages, so the counts below are reconstructed from them.
 original <- tibble(
-  condition = c("gain", "loss"),
-  n         = c(152, 155),
-  risky     = round(c(0.28 * 152, 0.78 * 155))
+  condition = c("Manipulation", "Control"),
+  sd         = c(1.18, 1.14)
+#  risky     = round(c(0.28 * 152, 0.78 * 155))
 )
-original_p_gain <- original$risky[original$condition == "gain"] / original$n[original$condition == "gain"]
-original_p_loss <- original$risky[original$condition == "loss"] / original$n[original$condition == "loss"]
+#original_p_gain <- original$risky[original$condition == "gain"] / original$n[original$condition == "gain"]
+#original_p_loss <- original$risky[original$condition == "loss"] / original$n[original$condition == "loss"]
+
+original_p <- 0.042
 ```
 
 ::: {.callout-note appearance="simple" icon=false}
@@ -77,7 +83,7 @@ original_p_loss <- original$risky[original$condition == "loss"] / original$n[ori
 
 - **Original paper:** Rios, K., Finkelshteyn, S., Markman, K. D., & Cohen, A. B. (2024). Jewish Americans’ identity salience and effects on attitudes toward diversity. *Scientific Reports, 14*, 21676. <https://doi.org/10.1038/s41598-024-72753-w>
 - **Preregistration:** [OSF registration](https://osf.io/XXXXX) *(registered YYYY-MM-DD, before final data collection)*
-- **Live experiment:** <https://psych251.github.io/sarmien22026/> (take the study exactly as participants did)
+- **Live experiment:** <https://stanforduniversity.qualtrics.com/jfe/form/SV_43jmv6cifQIKifI> (take the study exactly as participants did)
 - **Repository:** <https://github.com/psych251/sarmien22026> (experiment code, data, and this report)
 :::
 
@@ -85,10 +91,9 @@ original_p_loss <- original$risky[original$condition == "loss"] / original$n[ori
 
 | Tool and model | What it was used for | How you checked the output |
 |---|---|---|
-| *Claude Code (Claude Sonnet 5)* | *Implemented the experiment from the original Methods section* | *Ran the automated tests; took the study myself; compared every screen with the original materials* |
-| *Claude Code (Claude Sonnet 5)* | *Drafted the analysis code* | *Checked the exclusion counts by hand; confirmed the key test matches the preregistration* |
+| *Claude Code (Claude Sonnet 5)* | *N/A* | *N/A* |
 
-The table above is the intended use of AI for this project. I have not used AI tools for this project up to this point
+The purpose of the table above is to list any AI use for this project. I have not used AI tools for this project up to this point.
 
 I wrote all of the text in this report myself. AI tools were not used to write, rewrite or
 paraphrase it, and were not used to generate, alter, or impute any participant data. I take full
@@ -116,42 +121,45 @@ adapt its code and say so in the caption.
 read_phase <- function(id) {
   dir <- file.path("..", "data", "raw", id)
   if (!all(file.exists(file.path(dir, c("participants.csv", "trials.csv"))))) return(NULL)
-  participants <- read_csv(file.path(dir, "participants.csv"), show_col_types = FALSE)
-  trials       <- read_csv(file.path(dir, "trials.csv"), show_col_types = FALSE)
-  errors_path  <- file.path(dir, "errors.csv")
-  errors <- if (file.exists(errors_path)) read_csv(errors_path, show_col_types = FALSE) else tibble()
+  #participants <- read_csv(dir, file.path("experiment.csv"), show_col_types = FALSE)
 
-  complete <- participants |> filter(completed)
+#  trials       <- read_csv(file.path(dir, "trials.csv"), show_col_types = FALSE)
+#  errors_path  <- file.path(dir, "errors.csv")
+#  errors <- if (file.exists(errors_path)) read_csv(errors_path, show_col_types = FALSE) else 
+
+  complete <- participants |> filter(Finished)
 
   # Exclusion rule: replace with the rule you preregistered. Here: at least 6 of 8
   # lexical-decision trials correct, and at least one speeded response at all (a session in
   # which every speeded trial timed out is what a device without a keyboard produces).
-  ld <- trials |>
-    filter(task == "lexical_decision") |>
-    group_by(participant_id) |>
-    summarise(ld_acc           = mean(as.logical(correct), na.rm = TRUE),
-              ld_all_timed_out = all(as.logical(timed_out)),
-              .groups = "drop")
-  checked <- complete |> left_join(ld, by = "participant_id")
-  keep <- checked |> filter(!is.na(ld_acc), !ld_all_timed_out, ld_acc >= 0.75)
+  cleanedData <- participants |>
+    filter(AttentionCheck == 3 & Religion == 4 & IdentitySalient != 2)
+#    group_by(ResponseId) |>
+#    summarise(ld_acc           = mean(as.logical(correct), na.rm = TRUE),
+#              ld_all_timed_out = all(as.logical(timed_out)),
+#              .groups = "drop")
+  #checked <- complete |> left_join(cleanedData, by = "ResponseId")
+  #keep <- checked |> filter(!is.na(ld_acc), !ld_all_timed_out, ld_acc >= 0.75)
 
-  list(participants = participants, trials = trials, errors = errors,
-       complete = complete, keep = keep,
-       n_no_response = sum(checked$ld_all_timed_out %in% TRUE))
+#  list(participants = participants, trials = trials, errors = errors,
+#       complete = complete, keep = keep,
+#       n_no_response = sum(checked$ld_all_timed_out %in% TRUE))
 }
 
-# The key comparison's raw counts: how many analysed participants chose the risky program
-# in each frame.
-risky_counts <- function(d) {
-  d$trials |>
-    filter(task == "framing", participant_id %in% d$keep$participant_id) |>
-    group_by(condition) |>
-    summarise(risky = sum(choice == "risky"), n = n(), .groups = "drop")
-}
+# Composite score for feelings of diversity
+#phase1$cleanedData <- rowwise() |> 
+#  mutate(avgDiversity = mean(c_across(DivFeelings_1:DivFeelings_5)))
 
-# The key statistic: difference in the proportion choosing the risky program (loss minus
-# gain) with a 95% CI, and the uncorrected chi-square, which is the same test. NULL until
-# both frames have at least one analysed participant.
+#risky_counts <- function(d) {
+#  d$trials |>
+#    filter(task == "framing", participant_id %in% d$keep$participant_id) |>
+#   group_by(condition) |>
+#    summarise(risky = sum(choice == "risky"), n = n(), .groups = "drop")
+#}
+
+# The key statistic:
+#keyStat <- aov(avgDiversity ~ IdentitySalient, data = cleanedData)
+
 diff_ci <- function(counts) {
   loss <- counts[counts$condition == "loss", ]
   gain <- counts[counts$condition == "gain", ]
@@ -193,6 +201,7 @@ have_data   <- !is.null(phase1)
 have_phase2 <- !is.null(phase2)
 ```
 
+
 ```{r}
 #| label: key-stats
 #| echo: false
@@ -220,123 +229,73 @@ bind_rows(
 
 ## Introduction
 
-I am interested in the ethnic-racial identity development of Latine youth, what factors can promote or hinder ethnic-racial identity development, and whether ethnic-racial identity can be used to increase solidarity across groups. I was interested in Rios et al. (2024) because it is an experiment that manipulated ethnic-racial identity salience by asking participants if they belonged to an ethnic-racial minority group (including religious groups) to see if it would decrease intergroup bias. This study included participants that were Jewish and identified racially as White. The original study found that invoking ethnic-racial identity among Jewish participants did decrease intergroup bias across three experiments. I plan to replicate only the final experiment, Experiment 3, because it looked at potential mediators to the effect that was found.
+I am interested in the ethnic-racial identity development of Latine youth, what factors can promote or hinder ethnic-racial identity development, and whether ethnic-racial identity can be used to increase solidarity across groups. I was interested in Rios et al. (2024) because it is an experiment that manipulated ethnic-racial identity salience by asking participants if they belonged to an ethnic-racial minority group (including religious groups) to see if it would decrease intergroup bias, increase personal feelings of diversity, and increase White privilege awareness. This study included participants that were Jewish and identified racially as White. The original study found that invoking ethnic-racial identity among Jewish participants did decrease intergroup bias across three experiments and increased personal feelings of diversity in the thrid experiment. I plan to replicate only the final experiment, Experiment 3, because it is the only experiment of the three that analyzed data with the smallest sample.
 
-For this study, I created a survey with two conditions, one that invoked ethnic-racial identity and one that does not mention it. I preregistered one-way ANOVA testing for the effect of condition on prejudice and another test on feelings about diversity. A potential extension of the study I could undertake would be to add a condition that could invoke feelings of belonging to the ethnic-racial majority group (i.e., White).
+For this study, I created a survey with two conditions, one that invoked ethnic-racial identity and one that does not mention it. I preregistered one-way ANOVA testing for the effect of condition on feelings about diversity. A potential extension of the study I could undertake would be to add a condition that could invoke feelings of belonging to the ethnic-racial majority group (i.e., White).
 
 
 ## Methods
 
 ### Power analysis
 
-::: {.callout-tip icon=false}
-## Guidance
+The original effect size was given in the paper as η2p = 0.04, which can be interpretted as being between a small and medium effect. Based on the table below, 190 participants would be needed if I wanted to use 80% power as the paper did. Another possibility is to collect 2.5 times the original sample (263 participants). While each option would be ideal to see if the effect still holds, both are not feasible due to a small amount of Jewish American participants being on Prolific. As a result, I set the sample to be the same as the original study instead.
 
-Report the original effect size, the sample needed for 80%, 90% and 95% power to detect it,
-and the sample you chose and why. The table below is computed from the original study's
-numbers entered at the top of this file.
-
-Original effects are usually overestimates, so powering to the original effect tends to
-produce an underpowered replication. One widely used alternative is to collect 2.5 times the
-original sample, which gives 80% power to detect an effect the original study had only 33%
-power to detect (Simonsohn, 2015; Experimentology §10.4). Say which approach you used, and
-what the course's participant budget allowed.
-:::
 
 ```{r}
 #| label: power
 power_rows <- map_dfr(c(0.80, 0.90, 0.95), function(pw) {
-  n <- power.prop.test(p1 = original_p_gain, p2 = original_p_loss,
-                       power = pw, sig.level = 0.05)$n
-  tibble(power = scales::percent(pw), n_per_group = ceiling(n), n_total = 2 * ceiling(n))
+  n <- power.anova.test(groups = 2, n = NULL, between.var = .0967, 
+                        within.var = 2.32, sig.level = 0.05, power = pw)$n
+  tibble(power = scales::percent(pw), n_per_group = ceiling(n)/2, n_total = ceiling(n))
 })
 
-original_effect <- original_p_loss - original_p_gain
-two_and_half <- ceiling(2.5 * original$n)
+original_effect <- original_p
+two_and_half <- ceiling(2.5 * 105)
 
 knitr::kable(power_rows, col.names = c("Power", "N per frame", "N total"),
              caption = sprintf(
-               "Sample needed to detect the original effect (risky choice: %.0f%% gain vs %.0f%% loss, a difference of %.0f points), two-sided alpha = .05.",
-               100 * original_p_gain, 100 * original_p_loss, 100 * original_effect))
+               "Sample needed to detect the original effect, two-sided alpha = .05.",
+              n))
 ```
 
-For comparison, 2.5 times the original sample would be `r two_and_half[1]` in the gain frame
-and `r two_and_half[2]` in the loss frame (`r sum(two_and_half)` in total).
+For comparison, 2.5 times the original sample would be `r two_and_half`.
 
 ### Planned sample
 
-::: {.callout-tip icon=false}
-## Guidance
-
-Planned sample size and stopping rule, sampling frame (for example, "US residents on Prolific,
-fluent in English, 18 or older"), known demographics, and any preselection or screening. The
-stopping rule should be data-independent: "collect until N participants pass the exclusion
-criteria below" rather than "until the result is clear".
-:::
+The planned sample size was the same as the original study's sample size (N = 105) due to the small participant pool of Jewish Americans on Prolific that the original study had encountered. The sample frame was US residents on Prolific who listed a religious affiliation to Jewish and listed their race/ethnicity as White/Sephardic Jew or White/Caucasian. They will also be 18 years or older and fluent in English. The specific eligibility criteria were selected on Prolific so that a screening survey was not necessary. Recruitment will continue until 105 participants pass the exclusion criteria below.
 
 ### Materials
 
-::: {.callout-tip icon=false}
-## Guidance
-
-All materials. You can quote the original article directly: put the text in quotation marks
-and note that it was followed precisely, or quote it and point out the exceptions. Link to the
-live experiment above rather than pasting screenshots of every screen.
-:::
+The exact materials were obtained from the osf link provided in the article (https://osf.io/gh3nx). The file containing the materials ("Jewish_identity_Prolific_April_2023.docx") can be found under the associated project link (https://osf.io/rmx7f).
 
 ### Procedure
 
-::: {.callout-tip icon=false}
-## Guidance
+At the beginning of the study, participants see the consent text provided in the Class Prolific Guidelines page on Canvas. Then, "[p]articipants were randomly assigned to either the Jewish identity salient condition or control condition and completed the experimental manipulation, followed by the measure of perceived personal contributions to diversity from the correlational study (M = 4.14, SD = 1.18; α = 0.82) and the feeling thermometer items from Experiment 2 (evaluations of White Americans: M = 66.93, SD = 24.16; average evaluation of racial/ethnic minorities: M = 74.16, SD = 19.45, α = 0.94; intergroup bias composite: M = -7.23, SD = 24.34; LGBT composite: M = 70.62, SD = 24.13, α = 0.93). Next, participants completed the measures of White privilege awareness (M = 5.53, SD = 1.60; α = 0.96), Jewish identification (M = 5.24, SD = 1.19; α = 0.91), and White identification (M = 3.26, SD = 1.29; α = 0.89) from the correlational study" (Rios et al., 2024)
 
-As for Materials: quote the original where you can and point out the exceptions. Describe the
-sequence a participant experiences, from consent to debrief, and how long it takes.
-:::
+Afterwards, participants were asked to write in their Prolific ID number and fill out several demographic questions pertaining to their age, residence in the United States, religious affiliation and practices, race/ethnicity, gender, political affiliation, and education level. Once the demographic questions were complete. They reach the end of the study where they are thanked for their time and are debriefed on the study's purpose.
+
+From start to finish, the study should take between 5 - 10 minutes.
 
 ### Analysis plan
 
-::: {.callout-tip icon=false}
-## Guidance
+**Key analysis of interest.** As part of the analysis, I composed a 5-item composite score for personal feelings of diversity. Then, I used a one-way ANOVA test for the effect of condition on this 5-item composite score on personal feelings of diversity. This is the same test used in the original paper that found an effect based on condition.
 
-The analysis strategy, as close to the original as possible: data cleaning rules, exclusion
-rules, covariates, and the model or test. Original papers often do not spell this out; say
-where you had to make a choice and what you chose.
+Additionally, I also used a one-way ANOVA test for the effect of condition on intergroup bias. This was computed by taking the average feelings of warmth for all ethnic/racial minority groups listed in the feelings thermomenter and taking the difference between it and feelings of warmth towards White/European Americans.
 
-**State the key analysis of interest explicitly.** That is the single test your replication
-stands or falls on, and it must match your preregistration. You can pre-specify additional
-analyses here too.
-:::
+Lastly, another one-way ANOVA test was conducted for the effect of condition on White privilege awareness (another 5-item composite).
 
-**Key analysis of interest.** The proportion of participants choosing the risky program is
-higher in the loss frame than in the gain frame, tested with a chi-square test of independence
-on the 2 × 2 table of frame by choice. The effect size is the difference in the proportion
-choosing the risky program (loss minus gain), with a 95% confidence interval.
-
-**Exclusions.** Participants are excluded if they did not complete the study, if they answered
-no speeded trial at all (every lexical-decision trial timed out, the signature of a device
-without a keyboard), or if they answered fewer than 6 of the 8 lexical-decision trials
-correctly.
+**Exclusions.** Participants are excluded if they did not complete the study, if they did not select that they are part of an ethnic/racial or religious minority group in the Jewish salience condition, if they did not select their religious affiliation as Jewish, or if they failed the attention check.
 
 ### Differences from the original study
 
-::: {.callout-tip icon=false}
-## Guidance
-
-Every known difference in sample, setting, procedure, materials, and analysis, one per row.
-Minimizing differences is the goal, but some always remain. For each one, say whether it is
-expected to matter, based on claims in the original article or later research on when the
-effect does and does not appear. The rows below are the demo's real differences and show the
-level of detail expected; replace them with yours.
-:::
-
 | Aspect | Original study | This replication | Expected to matter? |
 |---|---|---|---|
-| Sample | University students in Stanford and British Columbia classrooms | Adults recruited on Prolific | Possibly. Framing effects have been found in both student and general samples, but their size varies across populations. |
-| Setting | Paper questionnaire in class | Online, unsupervised, on the participant's own computer | Unlikely for a single vignette, though attention may be lower online. |
-| Wording | "an unusual Asian disease" | "an unusual disease" | Unlikely. The ethnonym is incidental to the manipulation and dated. |
-| Design | Between subjects: each participant saw one frame | Between subjects, randomly assigned | No. |
-| Response | Circle a program on paper | Click a button | Unlikely. |
-| Other tasks | Problems presented alongside other questionnaire items | Followed by a short lexical-decision task used as an attention check | Unlikely: the check comes after the choice. |
+| Sample | Adults recruited on Prolific | Adults recruited on Prolific | No, it is the exact same. |
+| Setting | Online, unsupervised, on the participant's own computer | Online, unsupervised, on the participant's own computer | No, it is the exact same. |
+| Wording | N/A | N/A | The wording throughout the study is the exact same. |
+| Design | Between subjects, randomly assigned | Between subjects, randomly assigned | No, it is the exact same. |
+| Response | Select a response or type in the answer | Select a response or type in the answer | No, it is the exact same. |
+| Other tasks | Attention check asking for a specific selection | Attention check asking for a specific selection | No, it is the exact same. |
 
 ### Methods addendum (post data collection)
 
@@ -697,6 +656,7 @@ have it and the original's otherwise.
 
 ```{r}
 #| label: phase2-power
+#| eval: FALSE
 phase2_n_per_group <- 150   # planned analysed participants per condition in Phase 2
 
 p1_counts <- if (have_data) risky_counts(phase1)
