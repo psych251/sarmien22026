@@ -51,6 +51,11 @@ original_paper/
 # part of the record and belongs in the repository, like the CSVs. Check it for anything
 # identifying before committing, exactly as you would the free-text columns.
 identifiers.csv
+# Qualtrics csv file containing identifying information (Prolific IDs, IP addresses and locations).
+data/raw/qualtrics-raw.csv
+
+# css file connecting new participant IDs to Prolific IDs
+data/raw/participants.csv
 
 # OS / editor
 .DS_Store

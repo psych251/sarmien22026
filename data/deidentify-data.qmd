@@ -1,0 +1,57 @@
+---
+title: "Code to deidentify data downloaded from Qualtrics"
+author: "Natalie Sarmiento (sarmien2@stanford.edu)"
+---
+
+```{r}
+library(tidyverse)
+
+# Reading in the csv downloaded from Qualtrics
+rawData <- read.csv('/users/nataliework/Downloads/psych251/sarmien22026/data/raw/qualtrics-raw.csv')
+
+# removing additional rows added by qualtrics and sensitive metadata, keeping Finished
+# for the exclusion rule
+cleanedData <- rawData[-c(1:2),] %>%
+  select(-c(StartDate:Last.Seen.Question.IDs), Finished)
+
+# shuffling the order of participants and assigning new participant ids to each of them
+# (the seed keeps the same ids every time this file is run on the same export)
+set.seed(251)
+cleanedData <- cleanedData[sample(nrow(cleanedData)),] %>%
+  rowid_to_column(var = "participant_ID") 
+
+# creating a participant key to link participant IDs to prolific IDs
+prolificIDs <- cleanedData %>% select(participant_ID, ProlificID)
+
+# removing Prolific IDs from the data that will be used for analysis
+cleanedData <- cleanedData %>% select(-c(ProlificID)) 
+
+# labelling the assigned condition from the Condition embedded data field set in the
+# Qualtrics randomizer (1 = manipulation, 2 = control)
+if (!"Condition" %in% names(cleanedData)) {
+  stop("No Condition column: this export predates the Condition embedded data field.")
+}
+
+cleanedData <- cleanedData %>%
+  mutate(condition = case_when(
+    Condition == 1 ~ "Intervention",
+    Condition == 2 ~ "Control"
+    )) %>%
+  select(-Condition)
+
+
+
+
+# creating new csv files to add to the repo
+write.csv(cleanedData, '/users/nataliework/Downloads/psych251/sarmien22026/data/cleaned-data.csv')
+
+write.csv(prolificIDs, '/users/nataliework/Downloads/psych251/sarmien22026/data/raw/participants.csv')
+
+```
+
+
+
+
+
+
+

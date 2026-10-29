@@ -47,10 +47,11 @@ exclusion rule, and the key comparison.
 library(tidyverse)
 library(jsonlite)
 
-# Must match EXPERIMENT.id in experiment.js, and the --experiment you passed to the export.
-# Phase 2 runs under its own id, so its data never mix with Phase 1's.
-experiment_id        <- "framing-demo"
-experiment_id_phase2 <- "framing-demo-phase2"
+# The study runs in Qualtrics, so each phase's data is the de-identified CSV written by
+# data/deidentify-data.qmd. Paths are relative to this file (Quarto renders from writeup/).
+# Phase 2 is a separate Qualtrics survey with its own file, so its data never mix with Phase 1's.
+phase1_file <- "../data/cleaned-data.csv"
+phase2_file <- "../data/phase2-cleaned-data.csv"
 ```
 
 ```{r}
@@ -63,19 +64,31 @@ experiment_id_phase2 <- "framing-demo-phase2"
 # Rios et al., (2024), Experiment 3 lists N = 105: Used the data file provided in the osf project 
 # to determine how many participants were in each condition. Found that 52 participants were in the
 # manipulation condition and 53 participants were in the control.
-
-# Tversky & Kahneman (1981), Problem 1 (gain frame, N = 152): 72% chose the certain program,
-# 28% the risky one. Problem 2 (loss frame, N = 155): 22% certain, 78% risky. The paper
-# reports percentages, so the counts below are reconstructed from them.
-original <- tibble(
-  condition = c("Manipulation", "Control"),
-  sd         = c(1.18, 1.14)
-#  risky     = round(c(0.28 * 152, 0.78 * 155))
+#
+# Means, SDs and 95% CIs by condition: Table 4 (p. 4), Experiment 3 columns.
+# F tests and partial eta squared: Results, p. 4 ("In the last of the three experiments ...").
+# "Intervention" is the paper's Jewish identity salient condition.
+original <- tribble(
+  ~outcome,     ~condition,     ~n, ~mean, ~sd,   ~ci_low, ~ci_high,
+  "diversity",  "Intervention", 52,  4.38,  1.18,   4.06,    4.70,
+  "diversity",  "Control",      53,  3.91,  1.14,   3.60,    4.23,
+  "white_priv", "Intervention", 52,  5.65,  1.55,   5.21,    6.09,
+  "white_priv", "Control",      53,  5.41,  1.66,   4.97,    5.85,
+  "bias",       "Intervention", 52, -7.66, 21.21, -14.39,   -0.94,
+  "bias",       "Control",      53, -6.80, 27.26, -13.47,   -0.14
 )
-#original_p_gain <- original$risky[original$condition == "gain"] / original$n[original$condition == "gain"]
-#original_p_loss <- original$risky[original$condition == "loss"] / original$n[original$condition == "loss"]
+original_tests <- tribble(
+  ~outcome,     ~F,    ~df2, ~p,    ~eta2p,
+  "diversity",  4.25,  103,  0.042, 0.040,
+  "white_priv", 0.561, 103,  0.455, 0.005,
+  "bias",       0.032, 103,  0.858, 0.0003
+)
 
-original_p <- 0.042
+# The key outcome (perceived personal contributions to diversity) and readable outcome names.
+key_outcome <- "diversity"
+outcome_labels <- c(diversity  = "Perceived personal contributions to diversity",
+                    white_priv = "White privilege awareness",
+                    bias       = "Intergroup bias (White − minorities)")
 ```
 
 ::: {.callout-note appearance="simple" icon=false}
@@ -91,9 +104,10 @@ original_p <- 0.042
 
 | Tool and model | What it was used for | How you checked the output |
 |---|---|---|
-| *Claude Code (Claude Sonnet 5)* | *N/A* | *N/A* |
+| *Claude Code (Claude Opus 5.5)* | *Checked code I had written for "deidentify-data.qmd" and corrected mistakes made* | *Read through each change to make sure only what I asked was done* |
+| *Claude Code (Claude Opus 5.5)* | *Rewrote analysis code* | *Read through each change and double checked with the numbers listed in the original paper. In the case of reverse coding items, I went and checked the referenced papers listed for each measure to make sure the analyses were coding items correctly,* |
 
-The purpose of the table above is to list any AI use for this project. I have not used AI tools for this project up to this point.
+The purpose of the table above is to list any AI use for this project. 
 
 I wrote all of the text in this report myself. AI tools were not used to write, rewrite or
 paraphrase it, and were not used to generate, alter, or impute any participant data. I take full
@@ -101,128 +115,172 @@ responsibility for the content of this report, including any errors introduced b
 
 # Key statistics
 
-::: {.callout-tip icon=false}
-## Guidance
-
-One row per study for the key comparison: the original, your Phase 1 replication, and your
-Phase 2 extension. The table fills itself in from the data as each phase is exported, using the
-analysis code below (open "Show the analysis code"), which is shared by both phases so they are
-analysed identically. Edit that code once, here, to match your design and preregistered
-exclusion rule. On the scientific-extension track, the Phase 2 row reports the new comparison:
-adapt its code and say so in the caption.
-:::
-
 ```{r}
 #| label: analysis-functions
 #| code-summary: "Show the analysis code (shared by Phase 1 and Phase 2)"
 
-# Load one phase's exported data and apply the exclusion rule. Returns NULL if that phase
-# has not been exported yet, which is how every section below knows to skip itself.
-read_phase <- function(id) {
-  dir <- file.path("..", "data", "raw", id)
-  if (!all(file.exists(file.path(dir, c("participants.csv", "trials.csv"))))) return(NULL)
-  #participants <- read_csv(dir, file.path("experiment.csv"), show_col_types = FALSE)
-
-#  trials       <- read_csv(file.path(dir, "trials.csv"), show_col_types = FALSE)
-#  errors_path  <- file.path(dir, "errors.csv")
-#  errors <- if (file.exists(errors_path)) read_csv(errors_path, show_col_types = FALSE) else 
-
-  complete <- participants |> filter(Finished)
-
-  # Exclusion rule: replace with the rule you preregistered. Here: at least 6 of 8
-  # lexical-decision trials correct, and at least one speeded response at all (a session in
-  # which every speeded trial timed out is what a device without a keyboard produces).
-  cleanedData <- participants |>
-    filter(AttentionCheck == 3 & Religion == 4 & IdentitySalient != 2)
-#    group_by(ResponseId) |>
-#    summarise(ld_acc           = mean(as.logical(correct), na.rm = TRUE),
-#              ld_all_timed_out = all(as.logical(timed_out)),
-#              .groups = "drop")
-  #checked <- complete |> left_join(cleanedData, by = "ResponseId")
-  #keep <- checked |> filter(!is.na(ld_acc), !ld_all_timed_out, ld_acc >= 0.75)
-
-#  list(participants = participants, trials = trials, errors = errors,
-#       complete = complete, keep = keep,
-#       n_no_response = sum(checked$ld_all_timed_out %in% TRUE))
+# Score the scales. All Likert items are 1-7. Reverse-worded items are reversed (8 - x)
+# before averaging: WhitePriv_4 ("I do not feel that White people have any benefits ..."),
+# and items 1, 3 and 8 of both identification scales ("... has very little to do with how I
+# feel about myself", "... is unimportant to ...", "... is NOT a major factor ..."). The
+# paper does not list its reverse-scored items; these were checked against the papers the
+# scales come from (Swim & Miller, 1999; Sellers et al., 1997).
+score_scales <- function(d) {
+  reversed <- c("WhitePriv_4", "JewishID_1", "JewishID_3", "JewishID_8",
+                "WhiteID_1", "WhiteID_3", "WhiteID_8")
+  item_mean <- function(cols) {
+    m <- rowMeans(cols, na.rm = TRUE)
+    ifelse(is.nan(m), NA, m)
+  }
+  d |>
+    mutate(across(all_of(reversed), ~ 8 - .x)) |>
+    mutate(
+      diversity       = item_mean(pick(DivFeelings_1:DivFeelings_5)),
+      # Thermometers: 1 = White Americans; 2-6 = Black, Hispanic/Latino, Asian, Middle
+      # Eastern and Native Americans; 7-10 = gay men, lesbian women, transgender and
+      # bisexual individuals. Bias is White minus the minority average (p. 7), so higher
+      # scores mean more favourable evaluations of White Americans.
+      white_warmth    = FeelingThermo_1,
+      minority_warmth = item_mean(pick(FeelingThermo_2:FeelingThermo_6)),
+      bias            = white_warmth - minority_warmth,
+      lgbt            = item_mean(pick(FeelingThermo_7:FeelingThermo_10)),
+      white_priv      = item_mean(pick(WhitePriv_1:WhitePriv_5)),
+      jewish_id       = item_mean(pick(JewishID_1:JewishID_8)),
+      white_id        = item_mean(pick(WhiteID_1:WhiteID_8))
+    )
 }
 
-# Composite score for feelings of diversity
-#phase1$cleanedData <- rowwise() |> 
-#  mutate(avgDiversity = mean(c_across(DivFeelings_1:DivFeelings_5)))
+# Load one phase's de-identified data, apply the exclusion rule, and score the scales. Returns
+# NULL if that phase's file does not exist yet, which is how every section below knows to
+# skip itself. `steps` keeps everyone remaining after each exclusion, for the funnel table.
+read_phase <- function(file) {
+  if (!file.exists(file)) return(NULL)
+  # `condition` is the assigned condition, from the Condition embedded data field that the
+  # Qualtrics randomizer sets (labelled in deidentify-data.qmd).
+  started <- read.csv(file) |> mutate(assigned = condition)
 
-#risky_counts <- function(d) {
-#  d$trials |>
-#    filter(task == "framing", participant_id %in% d$keep$participant_id) |>
-#   group_by(condition) |>
-#    summarise(risky = sum(choice == "risky"), n = n(), .groups = "drop")
-#}
+  # Exclusion rule (Analysis plan), applied in this order: did not finish, religion not Jewish
+  # (Religion == 4), failed the attention check (AttentionCheck == 3 is "Yellow"), in the
+  # intervention condition did not say they belong to a minority group (IdentitySalient == 1
+  # is "Yes"), and outliers on the key measure. Files de-identified before Finished was kept
+  # skip the first step.
+  complete <- if ("Finished" %in% names(started)) {
+    filter(started, Finished %in% c(1, "1", TRUE, "TRUE", "True"))
+  } else started
+  jewish   <- filter(complete, Religion %in% 4)
+  attended <- filter(jewish, AttentionCheck %in% 3)
+  minority <- filter(attended, assigned == "Control" | IdentitySalient %in% 1) |> score_scales()
 
-# The key statistic:
-#keyStat <- aov(avgDiversity ~ IdentitySalient, data = cleanedData)
+  # Outliers, as in the original (p. 9): Cook's D for the ANOVA of condition on perceived
+  # personal contributions to diversity, excluding anyone whose D is more than 3 SD above the
+  # sample mean of D. Participants with no diversity score have no D and are not excluded here.
+  minority$cooks_d <- NA_real_
+  scored <- !is.na(minority$diversity) & !is.na(minority$assigned)
+  if (sum(scored) > 2 && n_distinct(minority$assigned[scored]) == 2) {
+    minority$cooks_d[scored] <- cooks.distance(lm(diversity ~ assigned, data = minority[scored, ]))
+  }
+  d_cutoff <- mean(minority$cooks_d, na.rm = TRUE) + 3 * sd(minority$cooks_d, na.rm = TRUE)
+  keep <- filter(minority, is.na(cooks_d) | is.na(d_cutoff) | cooks_d <= d_cutoff)
 
-diff_ci <- function(counts) {
-  loss <- counts[counts$condition == "loss", ]
-  gain <- counts[counts$condition == "gain", ]
-  if (nrow(loss) == 0 || nrow(gain) == 0) return(NULL)
-  pt <- prop.test(c(loss$risky, gain$risky), c(loss$n, gain$n), correct = FALSE)
-  tibble(N = loss$n + gain$n,
-         estimate = unname(pt$estimate[1] - pt$estimate[2]),
-         ci_low = pt$conf.int[1], ci_high = pt$conf.int[2],
-         statistic = unname(pt$statistic), p = pt$p.value)
+  list(started = started, keep = keep, cooks_d_cutoff = d_cutoff,
+       steps = list(`Started` = started, `Finished the study` = complete,
+                    `Religion is Jewish` = jewish, `Passed the attention check` = attended,
+                    `Intervention: said they belong to a minority group` = minority,
+                    `Not an outlier (Cook's D)` = keep))
 }
 
-# Side-by-side figure: any number of studies on the same axes, in the order given.
-prop_ci <- function(x, n) {
-  ci <- prop.test(x, n, correct = FALSE)$conf.int
-  tibble(p = x / n, low = ci[1], high = ci[2])
+# Per-condition summary of one outcome: n, mean, SD and 95% CI. The original study enters
+# the analysis in this same form (from Table 4), so both go through identical code below.
+condition_summary <- function(d, outcome = key_outcome) {
+  d$keep |>
+    filter(!is.na(.data[[outcome]])) |>
+    group_by(condition = assigned) |>
+    summarise(n = n(), mean = mean(.data[[outcome]]), sd = sd(.data[[outcome]]),
+              .groups = "drop") |>
+    mutate(se = sd / sqrt(n),
+           ci_low  = mean - qt(0.975, n - 1) * se,
+           ci_high = mean + qt(0.975, n - 1) * se) |>
+    select(-se)
 }
-comparison_plot <- function(...) {
+
+# The key statistic: the one-way ANOVA of condition (two groups), computed from the
+# per-condition summary. With two groups F = t^2 from the pooled-variance t test, and
+# partial eta squared = F / (F + df). The estimate is intervention minus control.
+diff_ci <- function(s) {
+  tr <- s[s$condition == "Intervention", ]
+  ct <- s[s$condition == "Control", ]
+  if (nrow(tr) == 0 || nrow(ct) == 0 || tr$n < 2 || ct$n < 2) return(NULL)
+  df2 <- tr$n + ct$n - 2
+  sd_pooled <- sqrt(((tr$n - 1) * tr$sd^2 + (ct$n - 1) * ct$sd^2) / df2)
+  se <- sd_pooled * sqrt(1 / tr$n + 1 / ct$n)
+  est <- tr$mean - ct$mean
+  t <- est / se
+  tibble(N = tr$n + ct$n, estimate = est,
+         ci_low = est - qt(0.975, df2) * se, ci_high = est + qt(0.975, df2) * se,
+         d = est / sd_pooled, F = t^2, df2 = df2, p = 2 * pt(-abs(t), df2),
+         eta2p = t^2 / (t^2 + df2))
+}
+
+# Side-by-side figure: condition means with 95% CIs for any number of studies, on the same
+# axes and in the order given. Each study is a condition_summary()-style tibble.
+comparison_plot <- function(..., outcome = key_outcome) {
   studies <- list(...)
   studies <- studies[!map_lgl(studies, ~ is.null(.x) || nrow(.x) == 0)]
   df <- imap_dfr(studies, ~ mutate(.x, Study = .y)) |>
-    rowwise() |> mutate(prop_ci(risky, n)) |> ungroup() |>
-    mutate(Study = factor(Study, levels = names(studies)), label = sprintf("n = %d", n))
-  fills <- setNames(c("grey55", "#1E6E76", "#B8792A")[seq_along(studies)], names(studies))
-  dodge <- position_dodge(width = 0.8)
-  ggplot(df, aes(x = condition, y = p, fill = Study)) +
-    geom_col(position = dodge, width = 0.75) +
-    geom_errorbar(aes(ymin = low, ymax = high), position = dodge, width = 0.2) +
-    geom_text(aes(y = 0.02, label = label), position = dodge, vjust = 0, size = 3, colour = "white") +
-    scale_y_continuous(labels = scales::percent, limits = c(0, 1)) +
-    scale_fill_manual(values = fills) +
-    labs(x = "Frame", y = "Chose the risky program", fill = NULL) +
+    mutate(Study = factor(Study, levels = names(studies)),
+           condition = factor(condition, levels = c("Control", "Intervention"),
+                              labels = c("Control", "Identity salient")),
+           label = sprintf("n = %d", n))
+  colours <- setNames(c("grey45", "#1E6E76", "#B8792A")[seq_along(studies)], names(studies))
+  dodge <- position_dodge(width = 0.5)
+  ggplot(df, aes(x = condition, y = mean, colour = Study)) +
+    geom_pointrange(aes(ymin = ci_low, ymax = ci_high), position = dodge, size = 0.6) +
+    geom_text(aes(y = ci_low, label = label), position = dodge, vjust = 1.6, size = 3,
+              show.legend = FALSE) +
+    scale_y_continuous(limits = if (outcome %in% c("diversity", "white_priv")) c(1, 7),
+                       breaks = if (outcome %in% c("diversity", "white_priv")) 1:7 else waiver()) +
+    scale_colour_manual(values = colours) +
+    labs(x = "Condition", y = outcome_labels[[outcome]], colour = NULL) +
     theme_minimal(base_size = 12) +
     theme(legend.position = "top")
 }
 
-phase1 <- read_phase(experiment_id)
-phase2 <- read_phase(experiment_id_phase2)
+phase1 <- read_phase(phase1_file)
+phase2 <- read_phase(phase2_file)
 have_data   <- !is.null(phase1)
 have_phase2 <- !is.null(phase2)
+
+original_key <- filter(original, outcome == key_outcome)
 ```
 
 
 ```{r}
 #| label: key-stats
 #| echo: false
-fmt_row <- function(study, r) {
+fmt_p <- function(p) if (p < 0.001) "< .001" else sub("^0", "", sprintf("%.3f", p))
+fmt_row <- function(study, r, collected = TRUE) {
   if (is.null(r)) {
-    return(tibble(Study = study, N = "", `Effect (loss − gain)` = "not yet collected",
-                  `95% CI` = "", `χ²(1)` = "", p = ""))
+    status <- if (collected) "not enough data (needs 2+ analysed per condition)" else "not yet collected"
+    return(tibble(Study = study, N = "", `Difference (salient − control)` = status,
+                  `95% CI` = "", F = "", p = "", `η²p` = ""))
   }
   tibble(Study = study, N = as.character(r$N),
-         `Effect (loss − gain)` = sprintf("%.0f points", 100 * r$estimate),
-         `95% CI` = sprintf("[%.0f, %.0f]", 100 * r$ci_low, 100 * r$ci_high),
-         `χ²(1)` = sprintf("%.2f", r$statistic),
-         p = format.pval(r$p, digits = 2, eps = 0.001))
+         `Difference (salient − control)` = sprintf("%.2f", r$estimate),
+         `95% CI` = sprintf("[%.2f, %.2f]", r$ci_low, r$ci_high),
+         F = sprintf("F(1, %d) = %.2f", r$df2, r$F),
+         p = fmt_p(r$p), `η²p` = sprintf("%.3f", r$eta2p))
 }
+# The original's difference and CI are recomputed from Table 4; its F, p and eta squared are
+# the values the paper reports (recomputing them from rounded means gives F = 4.31).
+orig_reported <- diff_ci(original_key) |>
+  mutate(select(filter(original_tests, outcome == key_outcome), F, df2, p, eta2p))
 bind_rows(
-  fmt_row("Original", diff_ci(original)),
-  fmt_row("Phase 1: replication", if (have_data) diff_ci(risky_counts(phase1))),
-  fmt_row("Phase 2: extension", if (have_phase2) diff_ci(risky_counts(phase2)))
+  fmt_row("Original", orig_reported),
+  fmt_row("Phase 1: replication", if (have_data) diff_ci(condition_summary(phase1)), have_data),
+  fmt_row("Phase 2: extension", if (have_phase2) diff_ci(condition_summary(phase2)), have_phase2)
 ) |>
-  knitr::kable(align = "lrlllr",
-               caption = "Key comparison: difference in the percentage of analysed participants choosing the risky program, loss frame minus gain frame.")
+  knitr::kable(align = "lrlllrr",
+               caption = "Key comparison: perceived personal contributions to diversity (1–7), identity salient minus control, with a one-way ANOVA of condition.")
 ```
 
 # Phase 1: Replication
@@ -238,31 +296,37 @@ For this study, I created a survey with two conditions, one that invoked ethnic-
 
 ### Power analysis
 
-The original effect size was given in the paper as η2p = 0.04, which can be interpretted as being between a small and medium effect. Based on the table below, 190 participants would be needed if I wanted to use 80% power as the paper did. Another possibility is to collect 2.5 times the original sample (263 participants). While each option would be ideal to see if the effect still holds, both are not feasible due to a small amount of Jewish American participants being on Prolific. As a result, I set the sample to be the same as the original study instead.
+The original effect size was given in the paper as η2p = 0.04, which can be interpretted as being between a small and medium effect. Based on the table below, 192 participants would be needed if I wanted to use 80% power as the paper did. Another possibility is to collect 2.5 times the original sample (263 participants). While each option would be ideal to see if the effect still holds, both are not feasible due to a small amount of Jewish American participants being active on Prolific (395 in the past 90 days). As a result, I set the sample to be the same as the original study instead.
 
 
 ```{r}
 #| label: power
+# Effect size from the original's reported partial eta squared, converted to Cohen's f.
+# power.anova.test() takes the variance of the group means (between.var, computed with
+# n - 1) relative to the within-group variance, and returns n PER GROUP. With two groups
+# and within.var = 1, between.var = 2 * f^2.
+original_eta2p <- original_tests$eta2p[original_tests$outcome == key_outcome]
+original_f <- sqrt(original_eta2p / (1 - original_eta2p))
+
 power_rows <- map_dfr(c(0.80, 0.90, 0.95), function(pw) {
-  n <- power.anova.test(groups = 2, n = NULL, between.var = .0967, 
-                        within.var = 2.32, sig.level = 0.05, power = pw)$n
-  tibble(power = scales::percent(pw), n_per_group = ceiling(n)/2, n_total = ceiling(n))
+  n <- ceiling(power.anova.test(groups = 2, between.var = 2 * original_f^2, within.var = 1,
+                                sig.level = 0.05, power = pw)$n)
+  tibble(power = scales::percent(pw), n_per_group = n, n_total = 2 * n)
 })
 
-original_effect <- original_p
-two_and_half <- ceiling(2.5 * 105)
+two_and_half <- ceiling(2.5 * sum(original_key$n))
 
-knitr::kable(power_rows, col.names = c("Power", "N per frame", "N total"),
+knitr::kable(power_rows, col.names = c("Power", "N per condition", "N total"),
              caption = sprintf(
-               "Sample needed to detect the original effect, two-sided alpha = .05.",
-              n))
+               "Sample needed to detect the original effect (η²p = %.3f, f = %.2f), two-sided alpha = .05.",
+               original_eta2p, original_f))
 ```
 
 For comparison, 2.5 times the original sample would be `r two_and_half`.
 
 ### Planned sample
 
-The planned sample size was the same as the original study's sample size (N = 105) due to the small participant pool of Jewish Americans on Prolific that the original study had encountered. The sample frame was US residents on Prolific who listed a religious affiliation to Jewish and listed their race/ethnicity as White/Sephardic Jew or White/Caucasian. They will also be 18 years or older and fluent in English. The specific eligibility criteria were selected on Prolific so that a screening survey was not necessary. Recruitment will continue until 105 participants pass the exclusion criteria below.
+The planned sample size was the same as the original study's sample size (N = 105) due to the small participant pool of Jewish Americans on Prolific that the original study had encountered. This small participant pool persists today with about 395 potential participants being eligible at the time of the study launch. The sample frame was US residents on Prolific who listed a religious affiliation to Jewish and listed their race/ethnicity as White/Sephardic Jew or White/Caucasian. They will also be 18 years or older and fluent in English. The specific eligibility criteria were selected on Prolific so that a screening survey was not necessary. Recruitment will continue until 105 participants pass the exclusion criteria below.
 
 ### Materials
 
@@ -284,7 +348,7 @@ Additionally, I also used a one-way ANOVA test for the effect of condition on in
 
 Lastly, another one-way ANOVA test was conducted for the effect of condition on White privilege awareness (another 5-item composite).
 
-**Exclusions.** Participants are excluded if they did not complete the study, if they did not select that they are part of an ethnic/racial or religious minority group in the Jewish salience condition, if they did not select their religious affiliation as Jewish, or if they failed the attention check.
+**Exclusions.** Participants are excluded if they did not complete the study, if they did not select that they are part of an ethnic/racial or religious minority group in the Jewish salience condition, if they did not select their religious affiliation as Jewish, if they failed the attention check, or if they are a statistical outlier. If a participant's Cook's D score is greater than 3 SD from the sample mean, they will be considered a statistical outlier and excluded.
 
 ### Differences from the original study
 
@@ -316,11 +380,9 @@ if (!have_data) {
   cat(
     "::: {.callout-warning icon=false}\n",
     "## No Phase 1 data yet\n\n",
-    "There are no exported data for `", experiment_id, "` yet, so the sample and results ",
-    "sections are skipped. This is expected before data collection. Export with ",
-    "`npm run export -- --experiment ", experiment_id, " --key <path to your key>` and render again. ",
-    "If you have exported, check that `experiment_id` at the top of this file matches ",
-    "`EXPERIMENT.id` in `experiment.js`.\n",
+    "There is no `", phase1_file, "` yet, so the sample and results sections are skipped. ",
+    "This is expected before data collection. Download the responses from Qualtrics, run ",
+    "`data/deidentify-data.qmd`, and render again.\n",
     ":::\n", sep = "")
 }
 ```
@@ -328,31 +390,22 @@ if (!have_data) {
 ```{r}
 #| label: phase1-data
 #| eval: !expr have_data
-# Loaded and excluded by read_phase(), under Key statistics, so Phase 1 and Phase 2 share one
-# exclusion rule.
-participants  <- phase1$participants
-trials        <- phase1$trials
-errors        <- phase1$errors
-complete      <- phase1$complete
-keep          <- phase1$keep
-n_no_response <- phase1$n_no_response
+# Loaded, excluded and scored by read_phase(), under Key statistics, so Phase 1 and Phase 2
+# share one exclusion rule and one scoring.
+started <- phase1$started
+keep    <- phase1$keep
 ```
 
 ```{r}
 #| label: funnel
 #| eval: !expr have_data
-funnel_levels <- c("Started", "Completed", "Passed exclusion criteria")
-bind_rows(
-  participants |> mutate(step = "Started"),
-  complete     |> mutate(step = "Completed"),
-  keep         |> mutate(step = "Passed exclusion criteria")
-) |>
-  mutate(step = factor(step, levels = funnel_levels)) |>
-  count(step, condition, .drop = FALSE) |>
+imap_dfr(phase1$steps, ~ count(.x, condition = assigned) |> mutate(Step = .y)) |>
+  mutate(Step = factor(Step, levels = names(phase1$steps)),
+         condition = coalesce(condition, "Condition unknown")) |>
   pivot_wider(names_from = condition, values_from = n, values_fill = 0) |>
-  mutate(Total = rowSums(across(-step))) |>
-  rename(Step = step) |>
-  knitr::kable(caption = "Participants at each step, by frame. Differences between frames in attrition or exclusion are a threat to validity and should be discussed.")
+  complete(Step) |>
+  mutate(across(-Step, ~ replace_na(.x, 0)), Total = rowSums(across(-Step))) |>
+  knitr::kable(caption = "Participants remaining after each exclusion step, by condition. Differences between conditions in attrition or exclusion are a threat to validity and should be discussed.")
 ```
 
 ```{r}
@@ -360,12 +413,8 @@ bind_rows(
 #| eval: !expr have_data
 #| echo: false
 #| results: asis
-cat(sprintf("Of %d participants who started, %d completed the study and %d met the exclusion criteria.",
-            nrow(participants), nrow(complete), nrow(keep)))
-if (n_no_response > 0) {
-  cat(sprintf(" %d completed session(s) contained no response to any speeded trial and were excluded on that basis.",
-              n_no_response))
-}
+cat(sprintf("Of %d participants who started, %d met the exclusion criteria.",
+            nrow(started), nrow(keep)))
 if (nrow(keep) == 0) cat(" No participants remain for analysis yet, so the results below are empty.")
 cat("\n")
 ```
@@ -373,21 +422,13 @@ cat("\n")
 ```{r}
 #| label: demographics
 #| eval: !expr have_data
-demo <- trials |>
-  filter(task == "demographics", participant_id %in% keep$participant_id) |>
-  mutate(resp = map(response, ~ fromJSON(.x))) |>
-  transmute(
-    participant_id,
-    age    = map_dbl(resp, ~ as.numeric(.x$age %||% NA)),
-    gender = map_chr(resp, ~ as.character(.x$gender %||% NA))
-  )
-
-if (nrow(demo) > 0) {
-  demo |>
-    summarise(N = n(), `Mean age` = round(mean(age, na.rm = TRUE), 1),
-              `SD age` = round(sd(age, na.rm = TRUE), 1),
-              `Age not given` = sum(is.na(age))) |>
-    knitr::kable(caption = "Age of the analysed sample.")
+if (nrow(keep) > 0) {
+  keep |>
+    group_by(Condition = assigned) |>
+    summarise(N = n(), `Mean age` = round(mean(Age, na.rm = TRUE), 1),
+              `SD age` = round(sd(Age, na.rm = TRUE), 1),
+              `Age not given` = sum(is.na(Age)), .groups = "drop") |>
+    knitr::kable(caption = "Age of the analysed sample, by condition.")
 }
 ```
 
@@ -403,6 +444,7 @@ belong here even if they seem minor, together with the reason.
 ## Results
 
 ### Data preparation
+Due to using Qualtrics for data collection, I needed to download my data manually and deidentify it before I could begin working with it. To deidentify the data, I created a separate file titled "deidentify-data.qmd" and wrote the code with the help of Claude. Once the data was deidentified and new participant IDs were assigned, I was able to use it in this report. 
 
 ::: {.callout-tip icon=false}
 ## Guidance
@@ -417,22 +459,32 @@ the data beyond that.
 ```{r}
 #| label: confirmatory
 #| eval: !expr have_data
-framing <- trials |>
-  filter(task == "framing", participant_id %in% keep$participant_id) |>
-  select(participant_id, condition, choice)
-risky <- risky_counts(phase1)
-tab <- table(Frame = framing$condition, Choice = framing$choice)
+rep_key <- condition_summary(phase1)
 
-if (all(dim(tab) == c(2, 2))) {
-  # No continuity correction, so this test and the effect-size interval below agree: the
-  # uncorrected 2 x 2 chi-square is the same test as the two-proportion comparison.
-  print(tab)
-  print(chisq.test(tab, correct = FALSE))
+if (!is.null(diff_ci(rep_key))) {
+  # One-way ANOVA of condition on perceived personal contributions to diversity, as in the
+  # original. Its F and p match diff_ci(), which the tables below use.
+  print(summary(aov(diversity ~ assigned, data = keep)))
 } else {
-  message("Chi-square not run: the frame-by-choice table is ", paste(dim(tab), collapse = " x "),
-          ". It needs both frames and both choices; with ", nrow(framing),
-          " participant(s) in the analysis set this is expected.")
+  message("ANOVA not run: it needs at least two analysed participants in each condition; ",
+          "there are ", nrow(keep), " in the analysis set.")
 }
+```
+
+```{r}
+#| label: secondary
+#| eval: !expr have_data
+# The two further ANOVAs in the analysis plan, alongside the original's reported results.
+secondary <- c("white_priv", "bias")
+map_dfr(c(key_outcome, secondary), function(o) {
+  r <- diff_ci(condition_summary(phase1, o))
+  ot <- filter(original_tests, outcome == o)
+  tibble(Outcome = outcome_labels[[o]],
+         `Original` = sprintf("F(1, %d) = %.2f, p = %s, η²p = %.3f", ot$df2, ot$F, fmt_p(ot$p), ot$eta2p),
+         `Replication` = if (is.null(r)) "not enough data" else
+           sprintf("F(1, %d) = %.2f, p = %s, η²p = %.3f", r$df2, r$F, fmt_p(r$p), r$eta2p))
+}) |>
+  knitr::kable(caption = "One-way ANOVAs of condition on each outcome in the analysis plan. The first row is the key analysis.")
 ```
 
 ### Replication assessment
@@ -450,18 +502,19 @@ informative and should be reported as such (Experimentology §3.2).
 ```{r}
 #| label: comparison
 #| eval: !expr have_data
-orig <- diff_ci(original)
-rep  <- diff_ci(risky)
+orig <- diff_ci(original_key)
+rep  <- diff_ci(rep_key)
 
 if (!is.null(rep)) {
   bind_rows(orig |> mutate(Study = "Original"), rep |> mutate(Study = "Phase 1: replication")) |>
     transmute(Study, N,
-              `Difference (loss − gain)` = sprintf("%.0f points", 100 * estimate),
-              `95% CI` = sprintf("[%.0f, %.0f]", 100 * ci_low, 100 * ci_high),
-              p = format.pval(p, digits = 2, eps = 0.001)) |>
-    knitr::kable(caption = "Effect size: difference in the percentage choosing the risky program.")
+              `Difference (salient − control)` = sprintf("%.2f", estimate),
+              `95% CI` = sprintf("[%.2f, %.2f]", ci_low, ci_high),
+              `Cohen's d` = sprintf("%.2f", d),
+              `η²p` = sprintf("%.3f", eta2p)) |>
+    knitr::kable(caption = "Effect size: difference in perceived personal contributions to diversity (1–7 scale), both rows computed from condition means and SDs.")
 } else {
-  message("Replication effect size not computed yet: need at least one analysed participant in each frame.")
+  message("Replication effect size not computed yet: need at least two analysed participants in each condition.")
 }
 ```
 
@@ -474,10 +527,10 @@ if (!is.null(rep)) {
   excludes_zero <- rep$ci_low > 0 | rep$ci_high < 0
   includes_orig <- orig$estimate >= rep$ci_low & orig$estimate <= rep$ci_high
   cat(sprintf(
-    "The replication's 95%% interval %s zero and %s the original estimate of %.0f points. ",
+    "The replication's 95%% interval %s zero and %s the original estimate of %.2f scale points. ",
     if (excludes_zero) "excludes" else "includes",
     if (includes_orig) "includes" else "does not include",
-    100 * orig$estimate))
+    orig$estimate))
   cat("These two facts are the starting point for the summary in the Discussion, not the conclusion.\n")
 }
 ```
@@ -517,10 +570,10 @@ caption. If the original reported no variability, say so rather than leaving it 
 ```{r}
 #| label: fig-comparison
 #| eval: !expr have_data
-#| fig-cap: "Percentage choosing the risky program in each frame, original study and Phase 1 replication. Error bars are 95% confidence intervals."
+#| fig-cap: "Mean perceived personal contributions to diversity (1–7) by condition, original study (Rios et al., 2024, Table 4, Experiment 3) and Phase 1 replication. Error bars are 95% confidence intervals."
 #| fig-width: 7
 #| fig-height: 4
-comparison_plot(Original = original, `Phase 1: replication` = risky)
+comparison_plot(Original = original_key, `Phase 1: replication` = rep_key)
 ```
 
 ### Exploratory analyses
@@ -531,35 +584,6 @@ comparison_plot(Original = original, `Phase 1: replication` = risky)
 Any follow-up analyses (optional). Label them clearly as exploratory: they were not planned, so
 they generate hypotheses rather than test them.
 :::
-
-```{r}
-#| label: exploratory-rt
-#| eval: !expr have_data
-ld <- trials |>
-  filter(task == "lexical_decision", participant_id %in% keep$participant_id) |>
-  mutate(correct = as.logical(correct), is_word = as.logical(is_word), rt = as.numeric(rt)) |>
-  filter(correct, !is.na(rt))
-
-if (nrow(ld) > 0) {
-  ld |>
-    group_by(`Real word` = is_word) |>
-    summarise(`Mean RT (ms)` = round(mean(rt)), `SD (ms)` = round(sd(rt)), Trials = n(), .groups = "drop") |>
-    knitr::kable(caption = "Exploratory: lexical-decision response times, correct trials only.")
-} else {
-  message("No correct lexical-decision trials with a response time yet.")
-}
-```
-
-```{r}
-#| label: data-quality
-#| eval: !expr have_data
-if (nrow(errors) > 0) {
-  errors |> select(any_of(c("at", "trial_index", "message"))) |> head(20) |>
-    knitr::kable(caption = "JavaScript errors reported from participants' browsers.")
-} else {
-  message("No errors were reported from participants' browsers.")
-}
-```
 
 ## Discussion
 
@@ -721,9 +745,8 @@ if (!have_phase2) {
   cat(
     "::: {.callout-warning icon=false}\n",
     "## No Phase 2 data yet\n\n",
-    "There are no exported data for `", experiment_id_phase2, "` yet, so the Phase 2 results are ",
-    "skipped. Export with `npm run export -- --experiment ", experiment_id_phase2,
-    " --key <path to your key>` once Phase 2 has run.\n",
+    "There is no `", phase2_file, "` yet, so the Phase 2 results are skipped. ",
+    "De-identify the Phase 2 Qualtrics export to that file once Phase 2 has run.\n",
     ":::\n", sep = "")
 }
 ```
@@ -731,27 +754,26 @@ if (!have_phase2) {
 ```{r}
 #| label: phase2-results
 #| eval: !expr have_phase2
-p2_counts <- risky_counts(phase2)
-p2_stats  <- diff_ci(p2_counts)
-cat(sprintf("Phase 2: %d started, %d completed, %d analysed.\n",
-            nrow(phase2$participants), nrow(phase2$complete), nrow(phase2$keep)))
+p2_key   <- condition_summary(phase2)
+p2_stats <- diff_ci(p2_key)
+cat(sprintf("Phase 2: %d started, %d analysed.\n", nrow(phase2$started), nrow(phase2$keep)))
 if (!is.null(p2_stats)) {
-  p_text <- if (p2_stats$p < 0.001) "p < .001" else sprintf("p = %.3f", p2_stats$p)
-  cat(sprintf("Key comparison: %.0f points [%.0f, %.0f], chi-square(1) = %.2f, %s.\n",
-              100 * p2_stats$estimate, 100 * p2_stats$ci_low, 100 * p2_stats$ci_high,
-              p2_stats$statistic, p_text))
+  cat(sprintf("Key comparison: %.2f [%.2f, %.2f], F(1, %d) = %.2f, p %s, partial eta squared = %.3f.\n",
+              p2_stats$estimate, p2_stats$ci_low, p2_stats$ci_high, p2_stats$df2,
+              p2_stats$F, if (p2_stats$p < 0.001) "< .001" else paste("=", fmt_p(p2_stats$p)),
+              p2_stats$eta2p))
 }
 ```
 
 ```{r}
 #| label: fig-phase2
 #| eval: !expr have_phase2
-#| fig-cap: "Percentage choosing the risky program in each frame: original study, Phase 1 replication, and Phase 2 extension. Error bars are 95% confidence intervals."
+#| fig-cap: "Mean perceived personal contributions to diversity (1–7) by condition: original study, Phase 1 replication, and Phase 2 extension. Error bars are 95% confidence intervals."
 #| fig-width: 8
 #| fig-height: 4
-comparison_plot(Original = original,
-                `Phase 1: replication` = if (have_data) risky_counts(phase1),
-                `Phase 2: extension` = risky_counts(phase2))
+comparison_plot(Original = original_key,
+                `Phase 1: replication` = if (have_data) condition_summary(phase1),
+                `Phase 2: extension` = condition_summary(phase2))
 ```
 
 ## Discussion
@@ -775,7 +797,7 @@ should be public; if something cannot be shared, say what and why.
 :::
 
 The experiment code, the anonymized data, and the code that produces every number in this
-report are available at <https://github.com/psych251/your-repo>. The experiment itself can be
-taken at <https://psych251.github.io/your-repo/>. The data contain no names, email addresses,
+report are available at <https://github.com/psych251/sarmien22026>. The experiment itself can be
+taken at <https://stanforduniversity.qualtrics.com/jfe/form/SV_43jmv6cifQIKifI>. The data contain no names, email addresses,
 IP addresses, or Prolific IDs; the file linking participants to their Prolific IDs is kept
 privately for payment and is not shared.
