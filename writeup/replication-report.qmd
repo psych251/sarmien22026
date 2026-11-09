@@ -539,26 +539,6 @@ The exploratory analyses suggests that it may be beneficial to change the exclus
 
 # Phase 2: Extension
 
-::: {.callout-tip icon=false}
-## Guidance: choosing your extension
-
-Follow the Extension guidelines page on Canvas. In brief:
-
-- **By default the extension is a best-practices modification of your Phase 1 experiment.** If
-  your replication did not succeed, it is a **rescue**: address the plausible reasons for the
-  failure. If it did succeed, it is an **upgrade**: make the estimate more precise. Typical
-  changes are better or more reliable measurement, more trials, a within-participant design
-  where that is legitimate, comprehension and manipulation checks, clearer instructions, or a
-  larger or better-targeted sample.
-- **If your scientific extension pitch was approved at Milestone 3 and your replication
-  succeeded, propose that instead:** the original conditions rerun unchanged, plus the one
-  added condition or manipulation, with a power analysis for the new comparison.
-- On either track you may add exploratory measures **at the end** of the study.
-- Every change is listed and tagged by category below; everything else stays identical.
-
-State your track on the line below, and delete the others.
-:::
-
 **Track:** Best-practices upgrade 
 
 ## Rationale
