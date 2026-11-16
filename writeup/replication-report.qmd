@@ -96,7 +96,8 @@ outcome_labels <- c(diversity  = "Perceived personal contributions to diversity"
 
 - **Original paper:** Rios, K., Finkelshteyn, S., Markman, K. D., & Cohen, A. B. (2024). Jewish Americans’ identity salience and effects on attitudes toward diversity. *Scientific Reports, 14*, 21676. <https://doi.org/10.1038/s41598-024-72753-w>
 - **Preregistration:** [OSF registration](https://osf.io/g8p3j) *(registered 2026-10-30, before final data collection)*
-- **Live experiment:** <https://stanforduniversity.qualtrics.com/jfe/form/SV_43jmv6cifQIKifI> (take the study exactly as participants did)
+- **Live experiment:** Phase 1: <https://stanforduniversity.qualtrics.com/jfe/form/SV_43jmv6cifQIKifI> (take the study exactly as participants did).
+Phase 2: <https://stanforduniversity.qualtrics.com/jfe/form/SV_0Gnw8kc7HL3sYVU> (take the study exactly as participants did)
 - **Repository:** <https://github.com/psych251/sarmien22026> (experiment code, data, and this report)
 :::
 
@@ -107,6 +108,8 @@ outcome_labels <- c(diversity  = "Perceived personal contributions to diversity"
 | *Claude Code (Claude Opus 5.5)* | *Checked code I had written for "deidentify-data.qmd" and corrected mistakes made* | *Read through each change to make sure only what I asked was done.* |
 | *Claude Code (Claude Opus 5.5)* | *Rewrote alll analyses code* | *Read through each change and double checked with the numbers listed in the original paper. In the case of reverse coding items, I went and checked the referenced papers listed for each measure to make sure the analyses were coding items correctly.* |
 | *Claude Code (Claude Opus 5.5)* | *Rewrote power analysis for phase 2* | *Read through each change to make sure the power analysis made sense on a conceptual level.* |
+| *Claude Code (Claude Opus 5.5)* | *Conducted a robustness check of the code and added code to show this using a table under exploratory analyses* | *Read through the robustness check and decided whether it would make sense to include the table given that it found participants I excluded would not have been excluded in the original paper.* |
+| *Claude Code (Claude Opus 5.5)* | *Updated the way exclusions were handled in the code for phase 1* | *Checked the logic made sense for how to determine whether someone was excluded or not.* |
 
 The purpose of the table above is to list any AI use for this project. 
 
@@ -154,21 +157,35 @@ score_scales <- function(d) {
 # Load one phase's de-identified data, apply the exclusion rule, and score the scales. Returns
 # NULL if that phase's file does not exist yet, which is how every section below knows to
 # skip itself. `steps` keeps everyone remaining after each exclusion, for the funnel table.
-read_phase <- function(file) {
+# `eligibility = FALSE` skips the eligibility step (a deviation from the preregistration; see
+# Deviations), for the robustness check under Exploratory analyses.
+read_phase <- function(file, eligibility = TRUE) {
   if (!file.exists(file)) return(NULL)
   # `condition` is the assigned condition, from the Condition embedded data field that the
   # Qualtrics randomizer sets (labelled in deidentify-data.qmd).
   started <- read.csv(file) |> mutate(assigned = condition)
 
-  # Exclusion rule (Analysis plan), applied in this order: did not finish, religion not Jewish
-  # (Religion == 4), failed the attention check (AttentionCheck == 3 is "Yellow"), in the
-  # intervention condition did not say they belong to a minority group (IdentitySalient == 1
-  # is "Yes"), and outliers on the key measure. Files de-identified before Finished was kept
-  # skip the first step.
+  # Exclusion rule (Analysis plan), applied in this order: did not finish, not eligible (see
+  # below; not preregistered), religion not Jewish (Religion == 4), failed the attention check
+  # (AttentionCheck == 3 is "Yellow"), in the intervention condition did not say they belong to
+  # a minority group (IdentitySalient == 1 is "Yes"), and outliers on the key measure. Files
+  # de-identified before Finished was kept skip the first step.
   complete <- if ("Finished" %in% names(started)) {
     filter(started, Finished %in% c(1, "1", TRUE, "TRUE", "True"))
   } else started
-  jewish   <- filter(complete, Religion %in% 4)
+
+  # Eligibility for the Prolific sample frame (White Jewish US residents), added after data
+  # collection (Deviations). Excluded: not a US resident (Resident: 1 = No, 2 = Yes), or
+  # identifies as Jewish only (IdentitySelect: 1 = White, 2 = Jewish, 3 = both, 4 = neither)
+  # AND gives no White answer to the race question: did not tick White/European American
+  # (Race code 6) and did not write "White" in the "Another term" text (Race_7_TEXT).
+  white_race <- function(d) grepl("(^|,)6(,|$)", d$Race) |
+    grepl("white", d$Race_7_TEXT, ignore.case = TRUE)
+  eligible <- if (eligibility) {
+    filter(complete, Resident %in% 2, !(IdentitySelect %in% 2 & !white_race(complete)))
+  } else complete
+
+  jewish   <- filter(eligible, Religion %in% 4)
   attended <- filter(jewish, AttentionCheck %in% 3)
   minority <- filter(attended, assigned == "Control" | IdentitySalient %in% 1) |> score_scales()
 
@@ -185,6 +202,7 @@ read_phase <- function(file) {
 
   list(started = started, keep = keep, cooks_d_cutoff = d_cutoff,
        steps = list(`Started` = started, `Finished the study` = complete,
+                    `Eligible: US resident, identifies as White` = eligible,
                     `Religion is Jewish` = jewish, `Passed the attention check` = attended,
                     `Intervention: said they belong to a minority group` = minority,
                     `Not an outlier (Cook's D)` = keep))
@@ -434,6 +452,7 @@ As mentioned in the section above, two participants that did not meet the pre-re
 
 For the second participant, they did not consider themselves to be White and thus did not fit eligibility criteria of the participant pool. This was determined via several demographic questions due to the race/ethnicity question in this study having a variety of responses other than just "White/European American." In the original study, it was not stated that participants would be excluded if they did not list their race/ethnicity as "White/European American." Instead, we even see one participant that did not list their ethnicity on Prolific as "White/Caucasian" or "White/Sephardic Jew" as being included in the final sample. Given the background literature that informs this study, I did not consider this to be a major issue as most of these alternative responses selected "White/European American" and another ethnicity/race for their response. For those that did not select "White/European American," the background literature in the original paper provided the explanation that some Jews, such as Sephardic Jews who were included in this study, may or may not be racialized as White. Nevertheless, because the study had a focus on the White identity of White Jewish Americans, I examined the other demographic questions to determine if they would need to be excluded. In particular, I looked at responses to the question "Do you personally identify as White, Jewish, both, or neither?" Participants could select "I identify as White," "I identify as Jewish," "I identify as both White and Jewish," or "I identify as neither White nor Jewish." For the participants that did not select "White/European American" as part of their ethnicity/race, I checked this question to see if they selected "I identity as White" or "I identify as both White and Jewish" to signal that there is some self-identification of being White from the participant. I found only one participant selected "I identify as Jewish" and did not list "White/European American" as their ethnicity/race and determined it would be best to exclude them. I excluded them in the same method aforementioned in this section.
 
+Finally, due to the limitations of the course budget and time crunch for this phase, I did not recruit more participants to reach the goal of N = 105. Instead, I analyzed the data at N = 99 even though the preregistered sample size was larger.
 
 ## Results
 
@@ -475,7 +494,7 @@ map_dfr(c(key_outcome, secondary), function(o) {
 
 ### Replication assessment
 
-The original study found an effect size of d = 0.41 with the estimated difference in the variation between groups to be 0.47 with a 95% confidence interval between 0.02 and 0.92. In my replication, I found an effect size of d = 0.46 with the estimated difference in the variation between groups to be 0.51 with a 95% confidence interval between 0.07 and 0.95. Given the similarity in effect sizes and the inclusion of the original estimate within the 95% confidence interval for my replication, I consider the replication of the main finding to be a success. 
+The original study found an effect size of d = 0.41 with the estimated difference in condition means to be 0.47 with a 95% confidence interval between 0.02 and 0.92. In my replication, I found an effect size of d = 0.46 with the estimated difference in the variation between groups to be 0.51 with a 95% confidence interval between 0.07 and 0.95. Given the similarity in effect sizes and the inclusion of the original estimate within the 95% confidence interval for my replication, I consider the replication of the main finding to be a success. 
 
 ```{r}
 #| label: comparison
@@ -525,7 +544,53 @@ comparison_plot(Original = original_key, `Phase 1: replication` = rep_key)
 
 ### Exploratory analyses
 
-While taking a cursory look at the data and identifying two additional exclusions for this study, I also came across two participants that did not select their religion as Jewish but listed that they were either raised jewish or spiritual but not religious. In the latter case, this participant had responded "I identify as both White and Jewish" for the question "Do you personally identify as White, Jewish, both, or neither?" This felt less clear cut to me compared to the aforementioned additional exclusions. While it seemed to me that they both identified as Jewish, they met the exclusion criteria I had pre-registered and had to be exlcuded from the analytic sample. However, I did run an analyses to check if including them in the analytic sample would change the results significantly. The results and effect size were even more similar to the original study (d = .44, difference between groups = .47(.03, .91)).
+```{r}
+#| label: robustness
+#| eval: !expr have_data
+# Exploratory robustness of the key comparison (not preregistered). Each row is the same
+# one-way ANOVA of condition on perceived personal contributions to diversity, run on a
+# different analysis set. Rows reuse condition_summary() and diff_ci() from Key statistics.
+
+# The original study before its Cook's D step (N = 110), from the authors' own data file on
+# OSF (https://osf.io/rmx7f, "Jewish identity Experiment 3.sav"): religion == 4, attcheck == 3,
+# ming != 2, then condition means and SDs of `diversity` (cond 1 = intervention). Running the
+# paper's Cook's D rule on that same file reproduces Table 4 exactly (N = 105).
+original_pre_outlier <- tribble(
+  ~condition,     ~n, ~mean, ~sd,
+  "Intervention", 54, 4.263, 1.311,
+  "Control",      56, 3.971, 1.314
+)
+
+# Phase 1 with every exclusion except the Cook's D outliers: the step just before the outlier
+# step in read_phase().
+no_outliers <- list(keep = phase1$steps[["Intervention: said they belong to a minority group"]])
+
+# Phase 1 with only the preregistered exclusions: the eligibility step skipped, Cook's D
+# recomputed on that sample.
+prereg_only <- read_phase(phase1_file, eligibility = FALSE)
+
+robust_rows <- list(
+  `Original: as reported (Table 4)`                = diff_ci(original_key),
+  `Original: before Cook's D exclusion`            = diff_ci(original_pre_outlier),
+  `Phase 1: as analysed`                           = diff_ci(condition_summary(phase1)),
+  `Phase 1: before Cook's D exclusion`             = diff_ci(condition_summary(no_outliers)),
+  `Phase 1: preregistered exclusions only (no eligibility step)` =
+    diff_ci(condition_summary(prereg_only))
+)
+robust_rows <- robust_rows[!map_lgl(robust_rows, is.null)]
+
+imap_dfr(robust_rows, ~ mutate(.x, `Analysis set` = .y)) |>
+  transmute(`Analysis set`, N,
+            `Difference (salient − control)` = sprintf("%.2f", estimate),
+            `95% CI` = sprintf("[%.2f, %.2f]", ci_low, ci_high),
+            `Cohen's d` = sprintf("%.2f", d),
+            p = map_chr(p, fmt_p)) |>
+  knitr::kable(caption = "Exploratory: the key comparison under alternative analysis sets. All rows are computed from condition means and SDs with the same code. The original's p values here are recomputed from rounded summaries, so the reported row differs slightly from the paper's p = .042.")
+```
+
+While taking a cursory look at the data and identifying two additional exclusions for this study, I also came across two participants that did not select their religion as Jewish but listed that they were either raised jewish or spiritual but not religious. In the latter case, this participant had responded "I identify as both White and Jewish" for the question "Do you personally identify as White, Jewish, both, or neither?" This felt less clear cut to me compared to the aforementioned additional exclusions. While it seemed to me that they both identified as Jewish, they met the exclusion criteria I had pre-registered and had to be excluded from the analytic sample. However, I did run an analyses to check if including them in the analytic sample would change the results significantly. The results and effect size were even more similar to the original study (d = .43, difference between groups = .47(.03, .91)).
+
+The table above looks at the results in the original paper and this phase as reported and without the exclusion of the Cook's D outliers. The results are similar in both the original paper and this replication when the outliers are included and find there to be no effect. An additional analyses was conducted where the manual exclusions I made were included in the sample. This was conducted after the robustness check was conducted by a separate agent to the one I had been working with, and this agent noticed that there were participants the original paper did not exclude due to living outside the US or not identifying as White. The effect size was larger when these participants were included in the phase 1 sample.
 
 ## Discussion
 
@@ -551,9 +616,10 @@ The phase 1 estimate was close to the result found in the orginal study. Neverth
 |---|---|---|---|---|
 | 1 | Sample | 99 analysed participants | 100 analysed participants (50 per frame) | I will recruit a similar amount of participants due to the small participant pool on Prolific that I am continuing to exhaust. |
 | 2 | Measurement | Measures are presented horizontally | Measures are presented vertically | After the lecture on survey methods, I realized that these measures were all displayed horizontally in the original sample. I did not want to change it in the replication in order to be as close to the original as possible. I will be changing this in Phase 2. |
-| 3 | Design | Set order for measures | Randomized order for measures | Measures were presented in the same order in the original study for each participant. In Phase 2, I would like to randomize the order in which measures appear such that perceived peronal contributions to diversity is not measured immediately after the manipulation. |
+| 3 | Design | Set order for items within a measure | Randomized order for items within a measure | Items within measures were presented in the same order in the original study for each participant. In Phase 2, I would like to randomize the order in which items appear to show robustness and see if the original effect was influenced by the order of the items. |
 | 4 | Debriefing | General debrief at the end of the study | Funnel debriefing | Adding a funnel debrief could help determine if the participants made any connection between the manipulation at the beginning and the measures that followed. |
-| 5 | Exclusion criteria | Did not complete the study, did not select that they are part of an ethnic/racial or religious minority group in the Jewish salience condition, did not select their religious affiliation as Jewish, failed the attention check, or if they are a statistical outlier | Did not complete the study, did not select that they are part of an ethnic/racial or religious minority group in the Jewish salience condition, do not live in the United States, did not identify as Jewish in any of the demographic questions or listed it at the beginning of the study if they were in the Jewish salience conditin, did not identify as White in any of the demographic questions, guessed the hypothesis early on in the funnel debrief, or if they are a statistical outlier | Exclusion criteria was expanded based on cases I encountered in Phase 1. The current exclusion criteria allows for more participants to be included that reflect the complexity that identifying as both White and Jewish may present for participants and ensures that participants are only those that live in the United States. |
+| 5 | Demographics | Asked participant if they were a resident of the United States. | Changed the wording to ask if they reside in the United States. | The word resident could be interpretted as asking about legal residence. Changed the wording slightly to account for this possibility. |
+| 6 | Exclusion criteria | Did not complete the study, did not select that they are part of an ethnic/racial or religious minority group in the Jewish salience condition, did not select their religious affiliation as Jewish, failed the attention check, or if they are a statistical outlier | Did not complete the study, did not select that they are part of an ethnic/racial or religious minority group in the Jewish salience condition, does not reside in the United States, did not identify as Jewish in any of the demographic questions or listed it at the beginning of the study if they were in the Jewish salience condition, did not identify as White in any of the demographic questions, guessed the hypothesis early on in the funnel debrief, failed the attention check, or if they are a statistical outlier | Exclusion criteria was expanded based on cases I encountered in Phase 1. The current exclusion criteria allows for more participants to be included that reflect the complexity that identifying as both White and Jewish may present for participants and ensures that participants are only those that live in the United States. |
 
 Everything not listed above is identical to Phase 1.
 
@@ -609,7 +675,7 @@ tibble(
 
 ## Analysis plan
 
-The key test will be the same as in Phase 1. I will also pool the samples from both phases to conduct an exploratory analysis of the key test. 
+The key test will be the same as in Phase 1. I will also pool the samples from both phases to conduct an exploratory analysis of the key test. The additional tests from Phase 1 that looked at intergroup bias and White privilege awareness will also be conducted in this phase. A new test that was included in the original study will also be included in Phase 2. This new test looks at whether perceived contributions to diversity mediates the relationship between ethnic-racial minority group salience condition and intergroup bias using PROCESS model 4 with 5000 bootstrapping estimates.
 
 ## Results
 
